@@ -31,11 +31,11 @@ func main() {
 	serverMux.Handle("/app/", apiCfg.middlewareMetricsInc(
 		http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
 
-	serverMux.HandleFunc("/healthz", handleReadiness)
+	serverMux.HandleFunc("GET /healthz", handleReadiness)
 
-	serverMux.HandleFunc("/metrics", handleMetrics(&apiCfg))
+	serverMux.HandleFunc("GET /metrics", handleMetrics(&apiCfg))
 
-	serverMux.HandleFunc("/reset", handleResetMetrics(&apiCfg))
+	serverMux.HandleFunc("POST /reset", handleResetMetrics(&apiCfg))
 
 	server := &http.Server{
 		Addr:    ":8080",

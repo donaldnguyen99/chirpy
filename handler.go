@@ -10,8 +10,7 @@ type handler func(http.ResponseWriter, *http.Request)
 func handleReadiness(w http.ResponseWriter, r *http.Request) {
 	r.Header.Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(200)
-	w.Write([]byte("OK"))
-	
+	w.Write([]byte("OK\n"))
 }
 
 func handleMetrics(apiCfg *apiConfig) (handler) {
@@ -19,7 +18,7 @@ func handleMetrics(apiCfg *apiConfig) (handler) {
 		r.Header.Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(200)
 		w.Write([]byte(
-			fmt.Sprintf("Hits: %v", apiCfg.fileserverHits.Load()),
+			fmt.Sprintf("Hits: %v\n", apiCfg.fileserverHits.Load()),
 		))
 	}
 }
@@ -29,6 +28,6 @@ func handleResetMetrics(apiCfg *apiConfig) (handler) {
 		apiCfg.resetMetrics()
 		r.Header.Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(200)
-		w.Write([]byte("Hits reset"))
+		w.Write([]byte("Hits reset\n"))
 	}
 }
