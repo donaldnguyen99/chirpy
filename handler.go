@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type handler func(http.ResponseWriter, *http.Request)
@@ -51,7 +54,50 @@ func handleValidateChirp(w http.ResponseWriter, r *http.Request) {
 	respondWithJSONResponseBody(w, cleanedBody)
 }
 
-func handleMetrics(apiCfg *apiConfig) (handler) {
+func handleCreateNewUser(apiCfg *apiConfig) handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		type parameters struct {
+			Email string `json:"email"`
+		}
+		params := parameters{}
+		decoder := json.NewDecoder(r.Body)
+		err := decoder.Decode(&params)
+		if err != nil {
+			log.Printf("error decoding parameters: %v", err)
+			w.WriteHeader(500)
+			return
+		}
+		
+		user, err := apiCfg.db.CreateUser(r.Context(), params.Email)
+		if err != nil {
+			log.Printf("error creating user: %v", err)
+			w.WriteHeader(500)
+			return
+		}
+		log.Printf("User created successfully: %s", user.Email)
+
+		type User struct {
+			ID        uuid.UUID `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			UpdatedAt time.Time `json:"updated_at"`
+			Email     string    `json:"email"`
+		}
+		data, err := json.Marshal(User{
+			ID: user.ID,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+			Email: user.Email,
+		})
+		if err != nil {
+			log.Printf("error marshalling user: %v", err)
+			w.WriteHeader(500)
+		}
+		w.WriteHeader(201)
+		w.Write(data)
+	}
+}
+
+func handleMetrics(apiCfg *apiConfig) handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(200)
@@ -67,12 +113,25 @@ func handleMetrics(apiCfg *apiConfig) (handler) {
 	}
 }
 
-func handleResetMetrics(apiCfg *apiConfig) (handler) {
+func handleReset(apiCfg *apiConfig) handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		apiCfg.resetMetrics()
-		r.Header.Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(200)
-		w.Write([]byte("Hits reset\n"))
+		if apiCfg.platform == "dev" {
+			err := apiCfg.db.DeleteAllUsers(r.Context())
+			if err != nil {
+				log.Printf("error deleting all users: %v", err)
+				w.WriteHeader(500)
+			}
+
+			apiCfg.resetMetrics()
+			r.Header.Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(200)
+			w.Write([]byte("Server reset\n"))
+			log.Println("Server reset")
+		} else {
+			log.Println("Request submitted not as dev")
+			w.WriteHeader(403)
+			w.Write([]byte("403 Forbidden\n"))
+		}
 	}
 }
 
