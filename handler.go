@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/donaldnguyen99/chirpy/internal/database"
 	"github.com/google/uuid"
 )
 
@@ -20,38 +21,75 @@ func handleReadiness(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK\n"))
 }
 
-func handleValidateChirp(w http.ResponseWriter, r *http.Request) {
-	type parameters struct{
-		Body string `json:"body"`
-	}
+func handleNewChirp(apiCfg *apiConfig) handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		type parameters struct{
+			Body string `json:"body"`
+			UserID uuid.UUID `json:"user_id"`
+		}
 
-	decoder := json.NewDecoder(r.Body)
-	params := parameters{}
-	err := decoder.Decode(&params)
-	if err != nil {
-		log.Printf("error decoding parameters: %v", err)
-		w.WriteHeader(500)
-		return
-	}
-	
-	if params.Body == "" {
-		const errorString = "Request body is empty"
-		log.Printf("error: " + errorString)
-		w.WriteHeader(400)
-		respondWithErrorResponseBody(w, errorString)
-		return
-	}
+		decoder := json.NewDecoder(r.Body)
+		params := parameters{}
+		err := decoder.Decode(&params)
+		if err != nil {
+			log.Printf("error decoding parameters: %v", err)
+			w.WriteHeader(500)
+			return
+		}
+		
+		if params.Body == "" {
+			const errorString = "Request body is empty"
+			log.Printf("error: " + errorString)
+			w.WriteHeader(400)
+			respondWithErrorResponseBody(w, errorString)
+			return
+		}
 
-	if len(params.Body) > 140 {
-		const errorString = "Chirp is too long"
-		log.Printf("error: " + errorString)
-		w.WriteHeader(400)
-		respondWithErrorResponseBody(w, errorString)
-		return
-	}
+		if len(params.Body) > 140 {
+			const errorString = "Chirp is too long"
+			log.Printf("error: " + errorString)
+			w.WriteHeader(400)
+			respondWithErrorResponseBody(w, errorString)
+			return
+		}
 
-	cleanedBody := replaceProfanity(params.Body)
-	respondWithJSONResponseBody(w, cleanedBody)
+		cleanedBody := replaceProfanity(params.Body)
+		
+		chirp, err := apiCfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
+			Body: cleanedBody,
+			UserID: params.UserID,
+		})
+		
+		if err != nil {
+			log.Printf("error creating chirp: %v", err)
+			w.WriteHeader(500)
+		}
+		log.Printf("Chirp created for %v", chirp.UserID)
+		
+		type chirpResponse struct {
+			ID        uuid.UUID `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			UpdatedAt time.Time `json:"updated_at"`
+			Body      string `json:"body"`
+			UserID    uuid.UUID `json:"user_id"`
+		}
+
+		chirpResp := chirpResponse{
+			ID: chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body: chirp.Body,
+			UserID: chirp.UserID,
+		}
+		payload, err := json.Marshal(chirpResp)
+		if err != nil {
+			log.Printf("error marshalling chirp response: %v", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.WriteHeader(201)
+		w.Write(payload)
+	}
 }
 
 func handleCreateNewUser(apiCfg *apiConfig) handler {
@@ -151,24 +189,6 @@ func respondWithErrorResponseBody(w http.ResponseWriter, errorString string) {
 		return
 	}
 	w.Write(resp_data)
-}
-
-func respondWithJSONResponseBody(w http.ResponseWriter, cleanedBodyString string) {
-	type cleanedResponseBody struct {
-		CleanedBody string `json:"cleaned_body"`
-	}
-
-	cleanedRespBody := cleanedResponseBody{
-		CleanedBody: cleanedBodyString,
-	}
-	payload, err := json.Marshal(cleanedRespBody)
-	if err != nil {
-		log.Printf("error marshalling cleaned response body: %v", err)
-		w.WriteHeader(500)
-		return
-	}
-	w.WriteHeader(200)
-	w.Write(payload)
 }
 
 func replaceProfanity(s string) string {
