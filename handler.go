@@ -21,10 +21,96 @@ func handleReadiness(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK\n"))
 }
 
+func handleGetAllChirps(apiCgf *apiConfig) handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		chirps, err := apiCgf.db.GetAllChirps(r.Context())
+		if err != nil {
+			log.Printf("error querying for all chirps: %v", err)
+			w.WriteHeader(500)
+			return
+		}
+
+		type chirpResponse struct {
+			ID        uuid.UUID `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			UpdatedAt time.Time `json:"updated_at"`
+			Body      string    `json:"body"`
+			UserID    uuid.UUID `json:"user_id"`
+		}
+
+		chirpRespSlice := []chirpResponse{}
+		for _, chirp := range chirps {
+			chirpResp := chirpResponse{
+				ID:        chirp.ID,
+				CreatedAt: chirp.CreatedAt,
+				UpdatedAt: chirp.UpdatedAt,
+				Body:      chirp.Body,
+				UserID:    chirp.UserID,
+			}
+			chirpRespSlice = append(chirpRespSlice, chirpResp)
+		}
+		payload, err := json.Marshal(chirpRespSlice)
+		payload = append(payload, "\n"...)
+		if err != nil {
+			log.Printf("error marshalling chirp response: %v", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.WriteHeader(200)
+		w.Write(payload)
+	}
+}
+
+func handleGetChirpByID(apiCfg *apiConfig) handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		chirpID := r.PathValue("chirpID")
+		chirpUUID, err := uuid.Parse(chirpID)
+		if err != nil {
+			w.WriteHeader(404)
+			log.Printf("error parsing id: %v", err)
+			respondWithErrorResponseBody(w, "Not found")
+			return
+		}
+
+		chirp, err := apiCfg.db.GetChirpByID(r.Context(), chirpUUID)
+		if err != nil {
+			w.WriteHeader(404)
+			log.Printf("error querying chirp by id: %v", err)
+			respondWithErrorResponseBody(w, "Not found")
+			return
+		}
+
+		type chirpResponse struct {
+			ID        uuid.UUID `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			UpdatedAt time.Time `json:"updated_at"`
+			Body      string    `json:"body"`
+			UserID    uuid.UUID `json:"user_id"`
+		}
+
+		chirpResp := chirpResponse{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserID:    chirp.UserID,
+		}
+		payload, err := json.Marshal(chirpResp)
+		payload = append(payload, "\n"...)
+		if err != nil {
+			log.Printf("error marshalling chirp response: %v", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.WriteHeader(200)
+		w.Write(payload)
+	}
+}
+
 func handleNewChirp(apiCfg *apiConfig) handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		type parameters struct{
-			Body string `json:"body"`
+		type parameters struct {
+			Body   string    `json:"body"`
 			UserID uuid.UUID `json:"user_id"`
 		}
 
@@ -36,7 +122,7 @@ func handleNewChirp(apiCfg *apiConfig) handler {
 			w.WriteHeader(500)
 			return
 		}
-		
+
 		if params.Body == "" {
 			const errorString = "Request body is empty"
 			log.Printf("error: " + errorString)
@@ -54,34 +140,36 @@ func handleNewChirp(apiCfg *apiConfig) handler {
 		}
 
 		cleanedBody := replaceProfanity(params.Body)
-		
+
 		chirp, err := apiCfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
-			Body: cleanedBody,
+			Body:   cleanedBody,
 			UserID: params.UserID,
 		})
-		
+
 		if err != nil {
 			log.Printf("error creating chirp: %v", err)
 			w.WriteHeader(500)
+			return
 		}
 		log.Printf("Chirp created for %v", chirp.UserID)
-		
+
 		type chirpResponse struct {
 			ID        uuid.UUID `json:"id"`
 			CreatedAt time.Time `json:"created_at"`
 			UpdatedAt time.Time `json:"updated_at"`
-			Body      string `json:"body"`
+			Body      string    `json:"body"`
 			UserID    uuid.UUID `json:"user_id"`
 		}
 
 		chirpResp := chirpResponse{
-			ID: chirp.ID,
+			ID:        chirp.ID,
 			CreatedAt: chirp.CreatedAt,
 			UpdatedAt: chirp.UpdatedAt,
-			Body: chirp.Body,
-			UserID: chirp.UserID,
+			Body:      chirp.Body,
+			UserID:    chirp.UserID,
 		}
 		payload, err := json.Marshal(chirpResp)
+		payload = append(payload, "\n"...)
 		if err != nil {
 			log.Printf("error marshalling chirp response: %v", err)
 			w.WriteHeader(500)
@@ -105,7 +193,7 @@ func handleCreateNewUser(apiCfg *apiConfig) handler {
 			w.WriteHeader(500)
 			return
 		}
-		
+
 		user, err := apiCfg.db.CreateUser(r.Context(), params.Email)
 		if err != nil {
 			log.Printf("error creating user: %v", err)
@@ -121,11 +209,13 @@ func handleCreateNewUser(apiCfg *apiConfig) handler {
 			Email     string    `json:"email"`
 		}
 		data, err := json.Marshal(User{
-			ID: user.ID,
+			ID:        user.ID,
 			CreatedAt: user.CreatedAt,
 			UpdatedAt: user.UpdatedAt,
-			Email: user.Email,
+			Email:     user.Email,
 		})
+
+		data = append(data, "\n"...)
 		if err != nil {
 			log.Printf("error marshalling user: %v", err)
 			w.WriteHeader(500)
@@ -141,7 +231,7 @@ func handleMetrics(apiCfg *apiConfig) handler {
 		w.WriteHeader(200)
 		w.Write([]byte(
 			fmt.Sprintf(
-`<html>
+				`<html>
   <body>
     <h1>Welcome, Chirpy Admin</h1>
     <p>Chirpy has been visited %d times!</p>
@@ -174,7 +264,7 @@ func handleReset(apiCfg *apiConfig) handler {
 }
 
 func respondWithErrorResponseBody(w http.ResponseWriter, errorString string) {
-	type errorResponseBody struct{
+	type errorResponseBody struct {
 		Error string `json:"error"`
 	}
 
@@ -183,6 +273,7 @@ func respondWithErrorResponseBody(w http.ResponseWriter, errorString string) {
 			Error: errorString,
 		},
 	)
+	resp_data = append(resp_data, "\n"...)
 	if resp_err != nil {
 		log.Printf("error marshalling error response body: %v", resp_err)
 		w.WriteHeader(500)

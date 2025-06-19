@@ -52,6 +52,8 @@ func main() {
 		http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
 
 	serverMux.HandleFunc("GET /api/healthz", handleReadiness)
+	serverMux.HandleFunc("GET /api/chirps", handleGetAllChirps(&apiCfg))
+	serverMux.HandleFunc("GET /api/chirps/{chirpID}", handleGetChirpByID(&apiCfg))
 	serverMux.HandleFunc("POST /api/chirps", handleNewChirp(&apiCfg))
 	serverMux.HandleFunc("POST /api/users", handleCreateNewUser(&apiCfg))
 
