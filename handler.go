@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/donaldnguyen99/chirpy/internal/auth"
 	"github.com/donaldnguyen99/chirpy/internal/database"
 	"github.com/google/uuid"
 )
@@ -180,9 +182,10 @@ func handleNewChirp(apiCfg *apiConfig) handler {
 	}
 }
 
-func handleCreateNewUser(apiCfg *apiConfig) handler {
+func handleLogin(apiCfg *apiConfig) handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		type parameters struct {
+			Password string `json:"password"`
 			Email string `json:"email"`
 		}
 		params := parameters{}
@@ -194,7 +197,77 @@ func handleCreateNewUser(apiCfg *apiConfig) handler {
 			return
 		}
 
-		user, err := apiCfg.db.CreateUser(r.Context(), params.Email)
+		user, err := apiCfg.db.GetUser(r.Context(), params.Email)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				log.Print("login attempted, user not found")
+				w.WriteHeader(401)
+				respondWithErrorResponseBody(w, "Incorrect email or password")
+			} else {
+				log.Printf("error getting user: %v", err)
+				w.WriteHeader(500)
+			}
+			return
+		}
+		
+		if err = auth.CheckPasswordHash(user.HashedPassword, params.Password); err != nil {
+			log.Printf("login attempted for user %s password incorrect: %v", user.Email, err)
+			w.WriteHeader(401)
+			respondWithErrorResponseBody(w, "Incorrect email or password")
+			return
+		}
+		
+		log.Printf("User %s successfully logged in", user.Email)
+
+		type User struct {
+			ID        uuid.UUID `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			UpdatedAt time.Time `json:"updated_at"`
+			Email     string    `json:"email"`
+		}
+		data, err := json.Marshal(User{
+			ID:        user.ID,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+			Email:     user.Email,
+		})
+
+		data = append(data, "\n"...)
+		if err != nil {
+			log.Printf("error marshalling user: %v", err)
+			w.WriteHeader(500)
+		}
+		w.WriteHeader(200)
+		w.Write(data)
+	}
+}
+
+func handleCreateNewUser(apiCfg *apiConfig) handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		type parameters struct {
+			Password string `json:"password"`
+			Email string `json:"email"`
+		}
+		params := parameters{}
+		decoder := json.NewDecoder(r.Body)
+		err := decoder.Decode(&params)
+		if err != nil {
+			log.Printf("error decoding parameters: %v", err)
+			w.WriteHeader(500)
+			return
+		}
+
+		hashed_password, err := auth.HashPassword(params.Password)
+		if err != nil {
+			log.Printf("error hashing password for new user: %v", err)
+			w.WriteHeader(500)
+			return
+		}
+
+		user, err := apiCfg.db.CreateUser(r.Context(), database.CreateUserParams{
+			HashedPassword: hashed_password,
+			Email: params.Email,
+		})
 		if err != nil {
 			log.Printf("error creating user: %v", err)
 			w.WriteHeader(500)
