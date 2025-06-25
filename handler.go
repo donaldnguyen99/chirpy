@@ -113,7 +113,6 @@ func handleNewChirp(apiCfg *apiConfig) handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		type parameters struct {
 			Body   string    `json:"body"`
-			UserID uuid.UUID `json:"user_id"`
 		}
 
 		decoder := json.NewDecoder(r.Body)
@@ -143,9 +142,28 @@ func handleNewChirp(apiCfg *apiConfig) handler {
 
 		cleanedBody := replaceProfanity(params.Body)
 
+		jwt, err := auth.GetBearerToken(r.Header)
+		if err != nil {
+			if strings.Contains(err.Error(), "'Bearer ' prefix") {
+				w.WriteHeader(400)
+				respondWithErrorResponseBody(w, err.Error())
+			} else {
+				log.Printf("error parsing bearer token while making new chirp: %v", err)
+				w.WriteHeader(500)
+			}
+			return
+		}
+
+		resUUID, err := auth.ValidateJWT(jwt, apiCfg.tokenSecret)
+		if err != nil {
+			w.WriteHeader(401)
+			respondWithErrorResponseBody(w, "Invalid token")
+			return
+		}
+
 		chirp, err := apiCfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
 			Body:   cleanedBody,
-			UserID: params.UserID,
+			UserID: resUUID,
 		})
 
 		if err != nil {
@@ -187,6 +205,7 @@ func handleLogin(apiCfg *apiConfig) handler {
 		type parameters struct {
 			Password string `json:"password"`
 			Email string `json:"email"`
+			ExpiresInSeconds int `json:"expires_in_seconds"`
 		}
 		params := parameters{}
 		decoder := json.NewDecoder(r.Body)
@@ -195,6 +214,10 @@ func handleLogin(apiCfg *apiConfig) handler {
 			log.Printf("error decoding parameters: %v", err)
 			w.WriteHeader(500)
 			return
+		}
+
+		if params.ExpiresInSeconds <= 0 || params.ExpiresInSeconds > 3600 {
+			params.ExpiresInSeconds = 3600
 		}
 
 		user, err := apiCfg.db.GetUser(r.Context(), params.Email)
@@ -219,17 +242,26 @@ func handleLogin(apiCfg *apiConfig) handler {
 		
 		log.Printf("User %s successfully logged in", user.Email)
 
+		jwt, err := auth.MakeJWT(user.ID, apiCfg.tokenSecret, time.Duration(params.ExpiresInSeconds) * time.Second)
+		if err != nil {
+			log.Printf("error making jwt: %v", err)
+			w.WriteHeader(500)
+			return
+		}
+
 		type User struct {
 			ID        uuid.UUID `json:"id"`
 			CreatedAt time.Time `json:"created_at"`
 			UpdatedAt time.Time `json:"updated_at"`
 			Email     string    `json:"email"`
+			Token	  string	`json:"token"`
 		}
 		data, err := json.Marshal(User{
 			ID:        user.ID,
 			CreatedAt: user.CreatedAt,
 			UpdatedAt: user.UpdatedAt,
 			Email:     user.Email,
+			Token:     jwt,
 		})
 
 		data = append(data, "\n"...)
