@@ -19,6 +19,7 @@ type apiConfig struct {
 	db *database.Queries
 	platform string
 	tokenSecret string
+	accessExpiresInSeconds int
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -46,6 +47,7 @@ func main() {
 		db: database.New(db),
 		platform: os.Getenv("PLATFORM"),
 		tokenSecret: os.Getenv("TOKEN_SECRET"),
+		accessExpiresInSeconds: 3600,
 	}
 
 	serverMux := http.NewServeMux()
@@ -58,6 +60,8 @@ func main() {
 	serverMux.HandleFunc("GET /api/chirps/{chirpID}", handleGetChirpByID(&apiCfg))
 	serverMux.HandleFunc("POST /api/chirps", handleNewChirp(&apiCfg))
 	serverMux.HandleFunc("POST /api/login", handleLogin(&apiCfg))
+	serverMux.HandleFunc("POST /api/refresh", handleRefresh(&apiCfg))
+	serverMux.HandleFunc("POST /api/revoke", handleRevoke(&apiCfg))
 	serverMux.HandleFunc("POST /api/users", handleCreateNewUser(&apiCfg))
 
 	serverMux.HandleFunc("GET /admin/metrics", handleMetrics(&apiCfg))
