@@ -20,6 +20,7 @@ type apiConfig struct {
 	platform string
 	tokenSecret string
 	accessExpiresInSeconds int
+	refreshExpiresInHours int
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -48,6 +49,7 @@ func main() {
 		platform: os.Getenv("PLATFORM"),
 		tokenSecret: os.Getenv("TOKEN_SECRET"),
 		accessExpiresInSeconds: 3600,
+		refreshExpiresInHours: 24 * 60,
 	}
 
 	serverMux := http.NewServeMux()
@@ -63,6 +65,7 @@ func main() {
 	serverMux.HandleFunc("POST /api/refresh", handleRefresh(&apiCfg))
 	serverMux.HandleFunc("POST /api/revoke", handleRevoke(&apiCfg))
 	serverMux.HandleFunc("POST /api/users", handleCreateNewUser(&apiCfg))
+	serverMux.HandleFunc("PUT /api/users", handleUpdateUser(&apiCfg))
 
 	serverMux.HandleFunc("GET /admin/metrics", handleMetrics(&apiCfg))
 

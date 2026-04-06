@@ -13,6 +13,12 @@ INSERT INTO users (
     $2
 ) RETURNING *;
 
+-- name: UpdateUser :one
+UPDATE users
+SET hashed_password = $1, email = $2
+WHERE id = $3
+RETURNING *;
+
 -- name: GetUser :one
 SELECT * FROM users
 WHERE email = $1;
