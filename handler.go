@@ -200,6 +200,63 @@ func handleNewChirp(apiCfg *apiConfig) handler {
 	}
 }
 
+func handleDeleteChirpByID(apiCfg *apiConfig) handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// require access token in header
+		accessTokenString, err := auth.GetBearerToken(r.Header)
+		if err != nil {
+			if strings.Contains(err.Error(), "'Bearer ' prefix") {
+				w.WriteHeader(401)
+				respondWithErrorResponseBody(w, err.Error())
+			} else {
+				log.Printf("error parsing bearer token to update user: %v", err)
+				w.WriteHeader(500)
+			}
+			return
+		}
+
+		userUUID, err := auth.ValidateJWT(accessTokenString, apiCfg.tokenSecret)
+		if err != nil {
+			w.WriteHeader(401)
+			respondWithErrorResponseBody(w, err.Error())
+			return
+		}
+
+		chirpID := r.PathValue("chirpID")
+		chirpUUID, err := uuid.Parse(chirpID)
+		if err != nil {
+			log.Printf("error parsing id: %v", err)
+			w.WriteHeader(404)
+			respondWithErrorResponseBody(w, "Not found")
+			return
+		}
+
+		chirp, err := apiCfg.db.GetChirpByID(r.Context(), chirpUUID)
+		if err != nil {
+			log.Printf("error querying chirp by id: %v", err)
+			w.WriteHeader(404)
+			respondWithErrorResponseBody(w, "Not found")
+			return
+		}
+		
+		if chirp.UserID != userUUID {
+			log.Printf("user %v not authorized to delete chirp %v", userUUID, chirp.ID)
+			w.WriteHeader(403)
+			respondWithErrorResponseBody(w, "Not authorized to perform this action")
+			return
+		}
+
+		err = apiCfg.db.DeleteChirpByID(r.Context(), chirp.ID)
+		if err != nil {
+			log.Printf("error in deleting chirp %v from database: %v", chirp.ID, err)
+			w.WriteHeader(500)
+			return
+		}
+
+		w.WriteHeader(204)
+	}
+}
+
 func handleLogin(apiCfg *apiConfig) handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		type parameters struct {
