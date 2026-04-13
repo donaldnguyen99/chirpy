@@ -67,6 +67,7 @@ func main() {
 	serverMux.HandleFunc("POST /api/revoke", handleRevoke(&apiCfg))
 	serverMux.HandleFunc("POST /api/users", handleCreateNewUser(&apiCfg))
 	serverMux.HandleFunc("PUT /api/users", handleUpdateUser(&apiCfg))
+	serverMux.HandleFunc("POST /api/polka/webhooks", handleUpgradeUserToChirpyRed(&apiCfg))
 
 	serverMux.HandleFunc("GET /admin/metrics", handleMetrics(&apiCfg))
 

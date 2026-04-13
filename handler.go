@@ -328,6 +328,7 @@ func handleLogin(apiCfg *apiConfig) handler {
 			Email        string    `json:"email"`
 			Token        string    `json:"token"`
 			RefreshToken string    `json:"refresh_token"`
+			IsChirpyRed  bool	   `json:"is_chirpy_red"`
 		}
 		data, err := json.Marshal(User{
 			ID:           user.ID,
@@ -336,6 +337,7 @@ func handleLogin(apiCfg *apiConfig) handler {
 			Email:        user.Email,
 			Token:        jwt,
 			RefreshToken: refreshToken,
+			IsChirpyRed:  user.IsChirpyRed,
 		})
 
 		if err != nil {
@@ -482,16 +484,18 @@ func handleCreateNewUser(apiCfg *apiConfig) handler {
 		log.Printf("User created successfully: %s", user.Email)
 
 		type User struct {
-			ID        uuid.UUID `json:"id"`
-			CreatedAt time.Time `json:"created_at"`
-			UpdatedAt time.Time `json:"updated_at"`
-			Email     string    `json:"email"`
+			ID          uuid.UUID `json:"id"`
+			CreatedAt   time.Time `json:"created_at"`
+			UpdatedAt   time.Time `json:"updated_at"`
+			Email       string    `json:"email"`
+			IsChirpyRed bool	  `json:"is_chirpy_red"`
 		}
 		data, err := json.Marshal(User{
-			ID:        user.ID,
-			CreatedAt: user.CreatedAt,
-			UpdatedAt: user.UpdatedAt,
-			Email:     user.Email,
+			ID:          user.ID,
+			CreatedAt:   user.CreatedAt,
+			UpdatedAt: 	 user.UpdatedAt,
+			Email:       user.Email,
+			IsChirpyRed: user.IsChirpyRed,
 		})
 
 		if err != nil {
@@ -563,16 +567,18 @@ func handleUpdateUser(apiCfg *apiConfig) handler {
 			user.ID, user.Email)
 
 		type User struct {
-			ID        uuid.UUID `json:"id"`
-			CreatedAt time.Time `json:"created_at"`
-			UpdatedAt time.Time `json:"updated_at"`
-			Email     string    `json:"email"`
+			ID          uuid.UUID `json:"id"`
+			CreatedAt   time.Time `json:"created_at"`
+			UpdatedAt   time.Time `json:"updated_at"`
+			Email       string    `json:"email"`
+			IsChirpyRed bool	  `json:"is_chirpy_red"`
 		}
 		data, err := json.Marshal(User{
-			ID:        user.ID,
-			CreatedAt: user.CreatedAt,
-			UpdatedAt: user.UpdatedAt,
-			Email:     user.Email,
+			ID:          user.ID,
+			CreatedAt:   user.CreatedAt,
+			UpdatedAt: 	 user.UpdatedAt,
+			Email:       user.Email,
+			IsChirpyRed: user.IsChirpyRed,
 		})
 
 		if err != nil {
@@ -583,6 +589,48 @@ func handleUpdateUser(apiCfg *apiConfig) handler {
 		data = append(data, "\n"...)
 		w.WriteHeader(200)
 		w.Write(data)
+	}
+}
+
+func handleUpgradeUserToChirpyRed(apiCfg *apiConfig) handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		
+		type parameters struct {
+			Event string `json:"event"`
+			Data  struct{
+				UserID uuid.UUID `json:"user_id"`
+			} `json:"data"`
+		}
+		params := parameters{}
+		decoder := json.NewDecoder(r.Body)
+		err := decoder.Decode(&params)
+		if err != nil {
+			log.Printf("error decoding parameters from body: %v", err)
+			w.WriteHeader(500)
+			return
+		}
+		
+		if params.Event != "user.upgraded" {
+			log.Printf("cannot find \"user.upgraded\" from event")
+			w.WriteHeader(204)
+			respondWithErrorResponseBody(w, "events supported are: \"user.upgraded\"")
+			return
+		}
+
+		err = apiCfg.db.UpgradeUserToChirpyRed(r.Context(), params.Data.UserID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				log.Printf("Attempted to upgrade user %v, user not found", params.Data.UserID)
+				w.WriteHeader(404)
+				respondWithErrorResponseBody(w, "Incorrect email or password")
+			} else {
+				log.Printf("error upgrading user in db: %v", err)
+				w.WriteHeader(500)
+			}
+			return
+		}
+
+		w.WriteHeader(204)
 	}
 }
 
