@@ -19,6 +19,7 @@ type apiConfig struct {
 	db *database.Queries
 	platform string
 	tokenSecret string
+	polkaKey string
 	accessExpiresInSeconds int
 	refreshExpiresInHours int
 }
@@ -48,6 +49,7 @@ func main() {
 		db: database.New(db),
 		platform: os.Getenv("PLATFORM"),
 		tokenSecret: os.Getenv("TOKEN_SECRET"),
+		polkaKey: os.Getenv("POLKA_KEY"),
 		accessExpiresInSeconds: 3600,
 		refreshExpiresInHours: 24 * 60,
 	}

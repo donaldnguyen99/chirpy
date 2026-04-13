@@ -595,6 +595,19 @@ func handleUpdateUser(apiCfg *apiConfig) handler {
 func handleUpgradeUserToChirpyRed(apiCfg *apiConfig) handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		
+		apiKey, err := auth.GetAPIKey(r.Header)
+		if err != nil {
+			log.Printf("error getting api key from request header: %v", err)
+			w.WriteHeader(401)
+			return
+		}
+
+		if apiKey != apiCfg.polkaKey {
+			log.Print("apiKey is incorrect")
+			w.WriteHeader(401)
+			return
+		}
+
 		type parameters struct {
 			Event string `json:"event"`
 			Data  struct{
@@ -603,13 +616,13 @@ func handleUpgradeUserToChirpyRed(apiCfg *apiConfig) handler {
 		}
 		params := parameters{}
 		decoder := json.NewDecoder(r.Body)
-		err := decoder.Decode(&params)
+		err = decoder.Decode(&params)
 		if err != nil {
 			log.Printf("error decoding parameters from body: %v", err)
 			w.WriteHeader(500)
 			return
 		}
-		
+
 		if params.Event != "user.upgraded" {
 			log.Printf("cannot find \"user.upgraded\" from event")
 			w.WriteHeader(204)
