@@ -25,11 +25,35 @@ func handleReadiness(w http.ResponseWriter, r *http.Request) {
 
 func handleGetAllChirps(apiCgf *apiConfig) handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		chirps, err := apiCgf.db.GetAllChirps(r.Context())
-		if err != nil {
-			log.Printf("error querying for all chirps: %v", err)
-			w.WriteHeader(500)
-			return
+
+		query := r.URL.Query()
+
+		authorID := query.Get("author_id")
+
+		var chirps []database.Chirp
+		var err error
+
+		if authorID == "" {
+			chirps, err = apiCgf.db.GetAllChirps(r.Context())
+			if err != nil {
+				log.Printf("error querying for all chirps: %v", err)
+				w.WriteHeader(500)
+				return
+			}
+		} else {
+			userUUID, err := uuid.Parse(authorID)
+			if err != nil {
+				log.Printf("error parsing user uuid string")
+				w.WriteHeader(500)
+				return
+			}
+
+			chirps, err = apiCgf.db.GetChirpsByUser(r.Context(), userUUID)
+			if err != nil {
+				log.Printf("error querying for all chirps from user %v: %v", userUUID, err)
+				w.WriteHeader(500)
+				return
+			}
 		}
 
 		type chirpResponse struct {
