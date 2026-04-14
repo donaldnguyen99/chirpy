@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -54,6 +55,13 @@ func handleGetAllChirps(apiCgf *apiConfig) handler {
 				w.WriteHeader(500)
 				return
 			}
+		}
+
+		sortOrder := query.Get("sort")
+		if sortOrder == "desc" {
+			sort.SliceStable(chirps, func(i, j int) bool {
+				return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+			})
 		}
 
 		type chirpResponse struct {
